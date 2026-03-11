@@ -1,0 +1,16 @@
+{
+  "name": "ai-image-processor-api",
+  "version": "1.0.0",
+  "description": "Lab 1 & 2 Backend for AI Image Processor",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.5.0",
+    "express": "^4.21.1",
+    "jsonwebtoken": "^9.0.2",
+    "uuid": "^11.0.3"
+  }
+}
