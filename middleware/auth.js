@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 
-// WARNING: Hardcoded secret for the lab! Store in an environment variable in a real production application.
+//Hardcoded. Store in an environment variable in a real production application.
 const JWT_SECRET = 'super_secret_lab_key';
 
 const verifyToken = (req, res, next) => {

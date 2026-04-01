@@ -1,11 +1,30 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
+const amqp = require('amqplib');
 
 const router = express.Router();
 
+// --- Configuration ---
+const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://localhost';
+const QUEUE_NAME = 'image_tasks';
+let channel = null;
+
+// Connect to RabbitMQ asynchronously
+async function connectRabbitMQ() {
+    try {
+        const connection = await amqp.connect(RABBITMQ_URL);
+        channel = await connection.createChannel();
+        await channel.assertQueue(QUEUE_NAME, { durable: true });
+        console.log('Jobs Route: Connected to RabbitMQ');
+    } catch (err) {
+        console.error('Jobs Route: Failed to connect to RabbitMQ', err);
+    }
+}
+connectRabbitMQ();
+
 // POST /jobs: Accept sourceUrl and type. Create a job in the DB with status CREATED.
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const { sourceUrl, type } = req.body;
   
   if (!sourceUrl || !type) {
@@ -22,16 +41,22 @@ router.post('/', (req, res) => {
   `);
 
   try {
+    // Save job with status CREATED
     stmt.run(id, userId, status, type, sourceUrl);
-    // Fetch the inserted job to return
-    const newJob = db.prepare('SELECT * FROM jobs WHERE id = ?').get(id);
     
-    // Start job simulation in the background
-    const simulator = req.app.get('simulator');
-    if (simulator) {
-        simulator(id);
+    // Publish message to RabbitMQ queue
+    if (channel) {
+        const message = JSON.stringify({ jobId: id, type, sourceUrl });
+        channel.sendToQueue(QUEUE_NAME, Buffer.from(message), { persistent: true });
+        
+        // Immediately update job status in DB to QUEUED
+        db.prepare('UPDATE jobs SET status = ? WHERE id = ?').run('QUEUED', id);
+    } else {
+        console.error('RabbitMQ channel not ready, message not published');
     }
-    
+
+    // Return the job object to the user (don't wait for processing)
+    const newJob = db.prepare('SELECT * FROM jobs WHERE id = ?').get(id);
     res.status(201).json(newJob);
   } catch (err) {
     console.error(err);

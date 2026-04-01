@@ -55,6 +55,10 @@ app.use(express.json());
 
 // --- ROUTES ---
 
+app.get('/', (req, res) => {
+    res.send('<h1>Ласкаво просимо до AI Image Processor API!</h1><p>Сервер працює успішно.</p>');
+});
+
 // Lab 2: Authentication routing
 app.use('/auth', authRoutes);
 
