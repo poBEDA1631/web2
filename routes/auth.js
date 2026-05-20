@@ -4,9 +4,9 @@ const { JWT_SECRET } = require('../middleware/auth');
 
 const router = express.Router();
 
-// GET /auth/login - Generates a JWT token for a hardcoded userId
-router.get('/login', (req, res) => {
-  const userId = 'user_123';
+// POST /auth/login - Generates a JWT token for a provided userId (mocking login)
+router.post('/login', (req, res) => {
+  const userId = req.body.userId || 'user_123';
   
   // Create a token that expires in 1 day
   const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '1d' });

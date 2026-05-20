@@ -1,6 +1,7 @@
-﻿node_modules/
+node_modules/
 .venv/
 __pycache__/
 *.sqlite
 .env
 test_request.ps1
+coverage/

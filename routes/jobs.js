@@ -2,11 +2,24 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
 const amqp = require('amqplib');
+const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 const router = express.Router();
 
+// --- MinIO / S3 Configuration ---
+const s3Client = new S3Client({
+    endpoint: 'http://127.0.0.1:9000',
+    region: 'us-east-1',
+    credentials: {
+        accessKeyId: 'minioadmin',
+        secretAccessKey: 'minioadmin'
+    },
+    forcePathStyle: true // Required for MinIO
+});
+
 // --- Configuration ---
-const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://localhost';
+const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://127.0.0.1';
 const QUEUE_NAME = 'image_tasks';
 let channel = null;
 
@@ -93,6 +106,38 @@ router.get('/:id', (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch job' });
+  }
+});
+
+// GET /jobs/:id/download: Generate presigned URL for MinIO
+router.get('/:id/download', async (req, res) => {
+  const { id } = req.params;
+  const userId = req.userId;
+
+  try {
+    const job = db.prepare('SELECT * FROM jobs WHERE id = ? AND userId = ?').get(id, userId);
+    
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found or access denied' });
+    }
+
+    if (job.status !== 'DONE' || !job.resultUrl) {
+      return res.status(400).json({ error: 'Job is not completed yet' });
+    }
+
+    const s3Key = job.resultUrl;
+    const command = new GetObjectCommand({
+      Bucket: 'images',
+      Key: s3Key
+    });
+
+    // URL expires in 1 hour (3600 seconds)
+    const signedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+    
+    res.json({ downloadUrl: signedUrl });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to generate download URL' });
   }
 });
 

@@ -1,9 +1,13 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 
-// Initialize the database connected to a file
-const dbPath = path.join(__dirname, 'database.sqlite');
-const db = new Database(dbPath);
+let db;
+if (process.env.NODE_ENV === 'test') {
+  db = new Database(':memory:');
+} else {
+  const dbPath = path.join(__dirname, 'database.sqlite');
+  db = new Database(dbPath);
+}
 
 // Create the jobs table if it doesn't exist
 db.exec(`

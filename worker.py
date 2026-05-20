@@ -2,10 +2,11 @@ import pika
 import json
 import time
 import requests
+import boto3
 from io import BytesIO
 from PIL import Image, ImageFilter
 
-RABBITMQ_HOST = 'localhost'
+RABBITMQ_HOST = '127.0.0.1'
 
 def process_image(ch, method, properties, body):
     try:
@@ -32,13 +33,29 @@ def process_image(ch, method, properties, body):
         img = img.convert('L') # Grayscale
         img = img.filter(ImageFilter.GaussianBlur(radius=5)) # Apply Gaussian Blur
 
-        output_filename = f"output_{jobId}.jpg"
-        img.save(output_filename)
+        s3_key = f"output_{jobId}.jpg"
+        buffer = BytesIO()
+        img.save(buffer, format="JPEG")
+        buffer.seek(0)
 
-        print(f"[*] Job {jobId} finished successfully. Saved to {output_filename}")
+        s3 = boto3.client('s3',
+            endpoint_url='http://127.0.0.1:9000',
+            aws_access_key_id='minioadmin',
+            aws_secret_access_key='minioadmin'
+        )
+
+        # Ensure bucket exists
+        try:
+            s3.head_bucket(Bucket='images')
+        except:
+            s3.create_bucket(Bucket='images')
+
+        s3.upload_fileobj(buffer, 'images', s3_key)
+
+        print(f"[*] Job {jobId} finished successfully. Uploaded to MinIO as {s3_key}")
 
         # Send DONE status
-        update_status(ch, jobId, "DONE", output_filename)
+        update_status(ch, jobId, "DONE", s3_key)
 
         # Acknowledge task completion
         ch.basic_ack(delivery_tag=method.delivery_tag)
