@@ -7,6 +7,17 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 const router = express.Router();
 
+const ERRORS = {
+    MISSING_FIELDS: 'sourceUrl and type are required',
+    INVALID_URL: 'Invalid sourceUrl format',
+    FETCH_FAILED: 'Failed to fetch jobs',
+    NOT_FOUND_OR_DENIED: 'Job not found or access denied',
+    GET_FAILED: 'Failed to fetch job',
+    NOT_COMPLETED: 'Job is not completed yet',
+    DOWNLOAD_FAILED: 'Failed to generate download URL',
+    CREATE_FAILED: 'Failed to create job'
+};
+
 // --- MinIO / S3 Configuration ---
 const s3Client = new S3Client({
     endpoint: 'http://127.0.0.1:9000',
@@ -41,7 +52,13 @@ router.post('/', async (req, res) => {
   const { sourceUrl, type } = req.body;
   
   if (!sourceUrl || !type) {
-    return res.status(400).json({ error: 'sourceUrl and type are required' });
+    return res.status(400).json({ error: ERRORS.MISSING_FIELDS });
+  }
+
+  try {
+    new URL(sourceUrl);
+  } catch (err) {
+    return res.status(400).json({ error: ERRORS.INVALID_URL });
   }
 
   const id = uuidv4();
@@ -73,7 +90,7 @@ router.post('/', async (req, res) => {
     res.status(201).json(newJob);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to create job' });
+    res.status(500).json({ error: ERRORS.CREATE_FAILED });
   }
 });
 
@@ -86,7 +103,7 @@ router.get('/', (req, res) => {
     res.json(jobs);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to fetch jobs' });
+    res.status(500).json({ error: ERRORS.FETCH_FAILED });
   }
 });
 
@@ -99,13 +116,13 @@ router.get('/:id', (req, res) => {
     const job = db.prepare('SELECT * FROM jobs WHERE id = ? AND userId = ?').get(id, userId);
     
     if (!job) {
-      return res.status(404).json({ error: 'Job not found or access denied' });
+      return res.status(404).json({ error: ERRORS.NOT_FOUND_OR_DENIED });
     }
     
     res.json(job);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to fetch job' });
+    res.status(500).json({ error: ERRORS.GET_FAILED });
   }
 });
 
@@ -118,11 +135,11 @@ router.get('/:id/download', async (req, res) => {
     const job = db.prepare('SELECT * FROM jobs WHERE id = ? AND userId = ?').get(id, userId);
     
     if (!job) {
-      return res.status(404).json({ error: 'Job not found or access denied' });
+      return res.status(404).json({ error: ERRORS.NOT_FOUND_OR_DENIED });
     }
 
     if (job.status !== 'DONE' || !job.resultUrl) {
-      return res.status(400).json({ error: 'Job is not completed yet' });
+      return res.status(400).json({ error: ERRORS.NOT_COMPLETED });
     }
 
     const s3Key = job.resultUrl;
@@ -137,8 +154,9 @@ router.get('/:id/download', async (req, res) => {
     res.json({ downloadUrl: signedUrl });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to generate download URL' });
+    res.status(500).json({ error: ERRORS.DOWNLOAD_FAILED });
   }
 });
 
 module.exports = router;
+module.exports.ERRORS = ERRORS;
